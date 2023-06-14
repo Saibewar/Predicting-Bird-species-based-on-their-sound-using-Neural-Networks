@@ -1,0 +1,412 @@
+---
+title: "CodeImplementation3"
+author: "Aishwarya Saibewar"
+date: "5/5/2023"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#Load the required libraries
+library(keras)
+library(ISLR2)
+library(tidyverse)
+library(abind)
+library(tools)
+
+```
+
+# Predicting bird species based on Sound
+
+#Binary Classfication
+
+
+```{r}
+# Set the working directory
+setwd("/Users/aishwaryasaibewar/Documents/SeattleUniversity-MSDS/Courses/SU Course Work/SPRING_2023/Statistical Machine Learning 2/Homework/Homework3/spectrograms_binary")
+
+
+#The folder includes 2 .dat files of amecro and barswa bird species
+folder_path <- "/Users/aishwaryasaibewar/Documents/SeattleUniversity-MSDS/Courses/SU Course Work/SPRING_2023/Statistical Machine Learning 2/Homework/Homework3/spectrograms_binary"
+
+#.dat files list
+dat_files <- list.files(folder_path, pattern = ".dat")
+
+# List of spectrogram data of all bird species
+data_list <- list()
+
+# List of names of all bird species
+speciesname_list <- list()
+
+#List of 1st dimension for assigning labels
+species_label<-list()
+
+# Iterating through the files and reading and proocessing them
+for (i in 1:length(dat_files)) {
+  data <- load(dat_files[i]) #Load the data from the dat files
+  data <- species  #Initial data is a large array and the data is stored in species object
+  data_list[[i]] <- data #Store the spectrogram data of each species in a list
+  fname_without_exten <- file_path_sans_ext(dat_files[i]) #extract the names of each species
+  speciesname_list[[i]] <- fname_without_exten #Then append it to the list and store it
+  species_label[i]<-dim(species)[1] #Choose the 1st dimension for assigning labels to each species
+  
+}
+```
+
+
+```{r}
+# Using abind function to combine data stored in list for all species along a particular axis.It will be a stacked data
+data_array <- abind(data_list, along = 1)
+
+#Check Dimension of the data
+dim(data_array)
+
+#Assigning labels for the species, 0 to amecro and 1 to barswa
+labels_assigned <- c(rep(0, species_label[1]), rep(1, species_label[2]))
+
+```
+
+
+```{r}
+#One-hot encode the labels
+one_hot_labels <- array(labels_assigned,dim=c(length(labels_assigned),1))
+```
+
+
+
+```{r}
+# The dataset was divided into training and testing, with 70% of the data used as a training dataset to train the models, and the remainder was reserved for testing purposes
+set.seed(1)
+train <- sample(nrow(data_array), 0.7 * nrow(data_array))
+
+x_train <- data_array[train,,]
+y_train <- one_hot_labels[train]
+
+x_test <- data_array[-train,,]
+y_test <- one_hot_labels[-train]
+
+y_train <- matrix(y_train, ncol = 1)
+y_test <- matrix(y_test, ncol = 1)
+```
+
+
+```{r}
+#Dimensions of test and training
+dim(x_train)
+dim(x_test)
+```
+
+```{r}
+dim(y_train)
+dim(y_test)
+```
+
+
+
+```{r}
+#Reshape the data to a 4D array to feed as an input to the neural network
+x_train <- array_reshape(x_train, c(dim(x_train)[1], dim(x_train)[2], dim(x_train)[3], 1))
+x_test <- array_reshape(x_test, c(dim(x_test)[1], dim(x_test)[2], dim(x_test)[3], 1))
+```
+
+
+```{r}
+#Dimensions of test and training
+dim(x_train)
+dim(x_test)
+```
+
+
+
+```{r}
+# Build a Neural Network
+binary_model <- keras_model_sequential() %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3, 3),padding = "same", activation = "relu", input_shape = c(343,256,1)) %>% 
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3, 3),padding = "same", activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  #layer_dropout(rate = 0.2) %>% #Adding dropout layer
+  layer_flatten() %>%
+  layer_dense(units = 32, activation = "relu") %>%
+  layer_dropout(rate = 0.3) %>% #Adding dropout layer
+  layer_dense(units = 1, activation = "sigmoid")
+```
+
+
+```{r}
+# Compile model by considering loss as binary_crossentropy and optimizer as adam and performance metrics as Accuracy
+binary_model %>% compile(loss = "binary_crossentropy",
+  optimizer = "adam",
+  metrics = list("accuracy")
+)
+
+```
+
+
+```{r}
+#Summary of the binary classification model
+summary(binary_model)
+```
+
+```{r}
+# Fit the model and estimate the time taken to train the model.
+system.time(
+   history <- binary_model %>%
+      fit(x_train, y_train, epochs = 10, batch_size = 25,
+        validation_split = 0.2)
+ )
+
+```
+
+```{r}
+#Plot the history of the model.
+plot(history, smooth = FALSE, main = "Performance metrics for Binary Classification")
+
+```
+
+
+
+```{r}
+#Verify the dimensions
+dim(x_test)
+dim(y_test)
+```
+
+
+```{r}
+# Evaluate model on test data
+test_binary_accuracy <- binary_model %>% evaluate(x_test, y_test)
+cat("Test accuracy for binary classification model using CNN is ", test_binary_accuracy)
+
+```
+
+A binary classification model was developed to classify the bird species as amecro or barswa based on their sound. A Convolution Neural Network was developed to perform this classification. As shown in Figure 1 the model's loss and accuracy are plotted against the increasing number of epochs for the training and validation dataset. It can be observed that the accuracy of the training and validation data increases with the number of epochs, and the model converges at the 10th epoch with a batch size of 25. Similarly, the loss tends to decrease as the number of epochs increases. The initial model without dropout layers has predicted with a test accuracy of 93.3%. To improve the accuracy of the model, a dropout layer that ignored 30% of the training data was added to the CNN model. As a result of this, the accuracy of the test data has slightly increased from 93.3% to 93.9%. Finally, the best model predicted the training data with an accuracy of 98%, validation data with an accuracy of 97%, and the test data with an accuracy of 96.9%. This model was able to classify the species more accurately because the sounds of the bird species amecro or barswa are quite different and the model was able to understand the sound patterns of the species and classify the new observations accordingly.
+
+
+==========================================================================================================================
+
+
+# MULTICLASS CLASSIFICATION
+
+
+```{r}
+# Set the working directory
+setwd("/Users/aishwaryasaibewar/Documents/SeattleUniversity-MSDS/Courses/SU Course Work/SPRING_2023/Statistical Machine Learning 2/Homework/Homework3/spectrograms")
+
+
+#The folder includes 2 .dat files of amecro and barswa bird species
+folder_path <- "/Users/aishwaryasaibewar/Documents/SeattleUniversity-MSDS/Courses/SU Course Work/SPRING_2023/Statistical Machine Learning 2/Homework/Homework3/spectrograms"
+
+#.dat files list
+dat_files <- list.files(folder_path, pattern = ".dat")
+
+# List of spectrogram data of all bird species
+data_list <- list()
+
+# List of names of all bird species
+speciesname_list <- list()
+
+#List of 1st dimension for assigning labels
+species_label<-list()
+
+# Iterating through the files and reading and proocessing them
+for (i in 1:length(dat_files)) {
+  data <- load(dat_files[i]) #Load the data from the dat files
+  data <- species  #Initial data is a large array and the data is stored in species object
+  data_list[[i]] <- data #Store the spectrogram data of each species in a list
+  fname_without_exten <- file_path_sans_ext(dat_files[i]) #extract the names of each species
+  speciesname_list[[i]] <- fname_without_exten #Then append it to the list and store it
+  species_label[i]<-dim(species)[1] #Choose the 1st dimension for assigning labels to each species
+  
+}
+```
+
+
+
+
+```{r}
+# Using abind function to combine data stored in list for all species along a particular axis.It will be a stacked data
+data_array <- abind(data_list, along = 1)
+
+#Check Dimension of the data
+dim(data_array)
+
+#Assigning labels for the 12 species
+labels_assigned <- c(rep(0, species_label[1]), rep(1, species_label[2]),rep(2, species_label[3]),rep(3, species_label[4]),rep(4, species_label[5]),rep(5, species_label[6]),rep(6, species_label[7]),rep(7, species_label[8]),rep(8, species_label[9]),rep(9, species_label[10]),rep(10, species_label[11]),rep(11, species_label[12]))
+
+```
+
+
+
+```{r}
+# The dataset was divided into training and testing, with 70% of the data used as a training dataset to train the models, and the remainder was reserved for testing purposes
+set.seed(1)
+train <- sample(nrow(data_array), 0.7 * nrow(data_array))
+
+x_train <- data_array[train,,]
+y_train <- to_categorical(labels_assigned[train])
+
+x_test <- data_array[-train,,]
+y_test <- to_categorical(labels_assigned[-train])
+```
+
+
+```{r}
+#Check dimensions of test and training data
+dim(x_train)
+dim(x_test)
+```
+
+```{r}
+dim(y_train)
+dim(y_test)
+```
+
+
+
+
+
+```{r}
+#Reshape the data to a 4D array to feed as an input to the neural network
+x_train <- array_reshape(x_train, c(dim(x_train)[1], dim(x_train)[2], dim(x_train)[3], 1))
+x_test <- array_reshape(x_test, c(dim(x_test)[1], dim(x_test)[2], dim(x_test)[3], 1))
+
+```
+
+
+
+```{r}
+#Dimensions of test and training
+dim(x_train)
+dim(x_test)
+```
+
+
+```{r}
+# Build a Neural Network with 2 convolution layers,2 max pool layers, one flatten, 3 dense layers and a dropout layer
+multiclass_model <- keras_model_sequential() %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3, 3), activation = "relu", input_shape = c(343,256,1)) %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3, 3), activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_flatten() %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 32, activation = "relu") %>%
+  layer_dropout(rate = 0.4) %>% #Added for overfitting
+  layer_dense(units = 12, activation = "softmax")
+
+```
+
+
+```{r}
+# Compile model by considering loss as binary_crossentropy and optimizer as adam and performance metrics as Accuracy
+multiclass_model %>% compile(loss = "categorical_crossentropy",
+  optimizer = "adam",
+  metrics = list("accuracy")
+)
+
+```
+
+```{r}
+#Summary of the multiclass classification model
+summary(multiclass_model)
+```
+
+
+```{r}
+
+# Fit the model and estimate the time taken to train the model.
+system.time(
+   history <- multiclass_model %>%
+      fit(x_train, y_train, epochs = 10, batch_size = 25,
+        validation_split = 0.2)
+ )
+
+```
+
+```{r}
+#Plot the history
+plot(history, smooth = FALSE)
+
+```
+
+
+```{r}
+#Check the dimensions of test and training
+dim(x_test)
+dim(y_test)
+```
+
+
+```{r}
+# Evaluate model on test data
+test_multi_accuracy <- multiclass_model %>% evaluate(x_test, y_test)
+cat("Test accuracy for multiclass classification model using CNN is ", test_multi_accuracy)
+```
+
+A multiclass classification model was developed to classify the 12 bird species based on their sound using a Convolution Neural Network. As shown in Figure 2 the model's loss and accuracy are plotted against the increasing number of epochs. As shown in Figure 2, the model's accuracy and loss are plotted against the training and validation datasets for the increasing number of epochs. It can be observed that the model converges at the 10th epoch with a batch size of 25, and the accuracy of the training and validation data increases with the number of epochs. And the loss tends to decrease as the number of epochs increases. The initial model without dropout layers has predicted the training data, validation data, and test data with an accuracy of 90.8%, 70.1%, and 56.3% respectively. It can be seen that the model is overfitting the training data and is unable to generalize the patterns in test and validation datasets. To overcome this issue, an additional dropout layer that ignores 40% of the training data was added to the CNN model. This has resulted in decreasing the accuracy of training data from 90.8% to 82.8% and increasing the accuracy of test data from 56.3% to 67.2%. 
+
+```{r}
+#The names of the species
+speciesname_list
+```
+
+
+```{r}
+# Predict the model
+predict <- multiclass_model %>% predict(x_test)
+colnames(predict) <- speciesname_list
+head(predict)
+
+```
+
+```{r}
+#Ensure that the sum of the probbabilities is equal to 1
+sum(predict[1, ])
+sum(predict[2, ])
+```
+
+```{r}
+# https://www.rdocumentation.org/packages/nnet/versions/7.3-12/topics/predict.nnet
+
+#Fetch the actual and predicted values 
+Predicted = max.col(predict) - 1
+Actual = max.col(y_test) - 1
+```
+
+```{r}
+#Confusion matrix for multiclass classification
+multi_data_cf <- table(Predicted, Actual)
+multi_data_cf
+```
+
+
+```{r}
+#Rename the confusion matrix
+colnames(multi_data_cf) <- c("amecro","barswa","bkcchi","blujay","daejun","houfin","mallar3","norfli","rewbla","stejay","wesmea","whcspa")
+rownames(multi_data_cf) <- c("amecro","barswa","bkcchi","blujay","daejun","houfin","mallar3","norfli","rewbla","stejay","wesmea","whcspa")
+```
+
+```{r}
+#Final Confusion matrix for multiclass classification
+multi_data_cf
+```
+
+
+The confusion matrix of the multiclass classification model is shown in Figure 3. The diagonal elements represent the correct classifications and the others represent the misclassifications. It very well may be seen from the confusion matrix that there are misclassifications of the observations. Some of the incorrect classifications include barswa being predicted as houfin and whcspa, bkcchi as barswa and daejun, and norfli as blujay and daejun. This could be due to the similarity of these bird species sounds. Additionally, the spectrograms used for the analysis included data on just the louder parts of the audio clip. Although important patterns of the species may be present in the clip's louder parts, some species that had their identity in the clip's softer parts may have been incorrectly classified.
+
+
+
+
+
+
+
+
+
